@@ -1,6 +1,10 @@
 <Solution>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/TradingJournal.SharedKernel.Tests.UnitTests/TradingJournal.SharedKernel.Tests.UnitTests.csproj" Id="172476d6-f5f2-4d19-a1ed-aee90f18f8b2" />
+  </Folder>
   <Project Path="TradingJournal.Application/TradingJournal.Application.csproj" Id="483d630e-d6bb-4c5f-af2e-84f6835bc365" />
   <Project Path="TradingJournal.Domain/TradingJournal.Domain.csproj" Id="93a4c993-7563-463c-ba27-78c78203c570" />
   <Project Path="TradingJournal.Infrastructure/TradingJournal.Infrastructure.csproj" Id="abd5cdb1-1bf1-4935-9ffd-f96f73a604a8" />
+  <Project Path="TradingJournal.SharedKernel/TradingJournal.SharedKernel.csproj" Id="8408dc81-2188-45f4-b226-bb9e38d96773" />
   <Project Path="TradingJournal.WebApi/TradingJournal.WebApi.csproj" Id="555d1e55-e3f6-4bf2-abc1-4d8269a92d54" />
 </Solution>
