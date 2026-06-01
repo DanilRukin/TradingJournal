@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/Tests/">
+    <Project Path="Tests/TradingJournal.Domain.Tests.UnitTests/TradingJournal.Domain.Tests.UnitTests.csproj" Id="c54a98a6-bd2b-45e6-b71b-438e49d13414" />
     <Project Path="Tests/TradingJournal.SharedKernel.Tests.UnitTests/TradingJournal.SharedKernel.Tests.UnitTests.csproj" Id="172476d6-f5f2-4d19-a1ed-aee90f18f8b2" />
   </Folder>
   <Project Path="TradingJournal.Application/TradingJournal.Application.csproj" Id="483d630e-d6bb-4c5f-af2e-84f6835bc365" />
