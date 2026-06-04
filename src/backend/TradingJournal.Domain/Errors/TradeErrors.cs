@@ -10,5 +10,7 @@
         public const string CanNotSetCloseDateForActiveTrade = "can_not_set_close_date_for_active_trade";
         public const string CloseDateMustBeAfterOpenDate = "close_date_must_be_after_open_date";
         public const string CanNotCloseNotActiveTrade = "can_not_close_not_active_trade";
+        public const string CanNotSetOpenPriceInNotActiveTrade = "can_not_set_open_price_in_not_active_trade";
+        public const string CanNotUpdateClosePriceInActiveTrade = "can_not_update_close_price_in_active_trade";
     }
 }
