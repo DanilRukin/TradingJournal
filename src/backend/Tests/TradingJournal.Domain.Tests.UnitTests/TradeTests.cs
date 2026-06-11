@@ -1,9 +1,4 @@
 ﻿using FluentAssertions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using TradingJournal.Domain.Common;
 using TradingJournal.Domain.Infrastructure;
 using TradingJournal.Domain.TradeAgregate;
@@ -21,11 +16,12 @@ public class TradeTests
         DateTime close = open.AddMinutes(1);
         DateTime updatedOpenDate = close.AddMinutes(1);
         Price price = new(1);
+        Price comission = new(0.001m);
         Volume volume = new(1);
-        Trade trade = Trade.Open("test", volume, price, TradeType.Long, open);
+        Trade trade = Trade.Open("test", volume, price, comission, TradeType.Long, open);
 
         Price closePrice = new(45);
-        trade.Close(close, closePrice);
+        trade.Close(close, closePrice, comission);
 
         var action = () => trade.UpdateOpenDate(updatedOpenDate);
 
@@ -41,9 +37,10 @@ public class TradeTests
         DateTime updatedOpenDate = open.AddDays(1);
         Price price = new(1);
         Volume volume = new(1);
-        Trade trade = Trade.Open("test", volume, price, TradeType.Long, open);
+        Price comission = new(0.001m);
+        Trade trade = Trade.Open("test", volume, price, comission, TradeType.Long, open);
         Price closePrice = new(45);
-        trade.Close(close, closePrice);
+        trade.Close(close, closePrice, comission);
 
         trade.UpdateOpenDate(updatedOpenDate);
         trade.OpenDate.Should().Be(updatedOpenDate);
@@ -57,7 +54,8 @@ public class TradeTests
         DateTime maxDate = DateTime.MaxValue;
         Price price = new(1);
         Volume volume = new(1);
-        Trade trade = Trade.Open("test", volume, price, TradeType.Long, open);
+        Price comission = new(0.001m);
+        Trade trade = Trade.Open("test", volume, price, comission, TradeType.Long, open);
         trade.CloseDate.Should().BeNull();
 
         trade.UpdateOpenDate(minDate);
@@ -73,7 +71,8 @@ public class TradeTests
         DateTime close = open.AddDays(2);
         Price price = new(1);
         Volume volume = new(1);
-        Trade trade = Trade.Open("test", volume, price, TradeType.Long, open);
+        Price comission = new(0.001m);
+        Trade trade = Trade.Open("test", volume, price, comission, TradeType.Long, open);
 
         var action = () => trade.UpdateCloseDate(close);
         action.Should().Throw<DomainException<Trade>>()
@@ -87,11 +86,12 @@ public class TradeTests
         DateTime close = open.AddDays(2);
         Price price = new(1);
         Volume volume = new(1);
-        Trade trade = Trade.Open("test", volume, price, TradeType.Long, open);
+        Price comission = new(0.001m);
+        Trade trade = Trade.Open("test", volume, price, comission, TradeType.Long, open);
         Price closePrice = new(45);
-        trade.Close(close, closePrice);
+        trade.Close(close, closePrice, comission);
 
-        var action = () => trade.Close(close, closePrice);
+        var action = () => trade.Close(close, closePrice,comission);
         action.Should().Throw<DomainException<Trade>>()
             .WithMessage(ErrorCodeConstructor.Build<Trade>(Errors.TradeErrors.CanNotCloseNotActiveTrade));
     }
@@ -103,9 +103,10 @@ public class TradeTests
         DateTime close = open.AddDays(2);
         Price price = new(1);
         Volume volume = new(1);
-        Trade trade = Trade.Open("test", volume, price, TradeType.Long, open);
+        Price comission = new(0.001m);
+        Trade trade = Trade.Open("test", volume, price, comission, TradeType.Long, open);
         Price closePrice = new(45);
-        trade.Close(close, closePrice);
+        trade.Close(close, closePrice, comission);
 
         var action = () => trade.UpdateOpenPrice((Price)555);
 
@@ -119,7 +120,8 @@ public class TradeTests
         DateTime open = DateTime.UtcNow;
         Price price = new(1);
         Volume volume = new(1);
-        Trade trade = Trade.Open("test", volume, price, TradeType.Long, open);
+        Price comission = new(0.001m);
+        Trade trade = Trade.Open("test", volume, price, comission, TradeType.Long, open);
         Price updatePrice = new(555);
         var action = () => trade.UpdateOpenPrice(updatePrice);
 
@@ -134,7 +136,8 @@ public class TradeTests
         DateTime open = DateTime.UtcNow;
         Price price = new(1);
         Volume volume = new(1);
-        Trade trade = Trade.Open("test", volume, price, TradeType.Long, open);
+        Price comission = new(0.001m);
+        Trade trade = Trade.Open("test", volume, price, comission, TradeType.Long, open);
 
         var action = () => trade.UpdateClosePrice(new(45));
 
@@ -148,10 +151,11 @@ public class TradeTests
         DateTime open = DateTime.UtcNow;
         Price price = new(1);
         Volume volume = new(1);
-        Trade trade = Trade.Open("test", volume, price, TradeType.Long, open);
+        Price comission = new(0.001m);
+        Trade trade = Trade.Open("test", volume, price, comission, TradeType.Long, open);
         Price closePrice = new Price(45);
         DateTime closeDate = open.AddDays(1);
-        trade.Close(closeDate, closePrice);
+        trade.Close(closeDate, closePrice, comission);
         Price updatedClosePrice = new Price(55);
 
         trade.ClosePrice.Should().Be(closePrice);
@@ -161,5 +165,23 @@ public class TradeTests
         action.Should().NotThrow();
 
         trade.ClosePrice.Should().Be(updatedClosePrice);
+    }
+
+    [Theory]
+    [InlineData(MarketContext.Trend)]
+    [InlineData(MarketContext.Range)]
+    [InlineData(MarketContext.Volitile)]
+    [InlineData(MarketContext.Quiet)]
+    [InlineData(null)]
+    public void ShouldApplyAnyValidMarketContextValue(MarketContext? context)
+    {
+        DateTime open = DateTime.UtcNow;
+        Price price = new(1);
+        Volume volume = new(1);
+        Price comission = new(0.001m);
+        Trade trade = Trade.Open("test", volume, price, comission, TradeType.Long, open);
+
+        trade.UpdateMarketContext(context);
+        trade.MarketContext.Should().Be(context);
     }
 }

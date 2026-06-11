@@ -12,5 +12,7 @@
         public const string CanNotCloseNotActiveTrade = "can_not_close_not_active_trade";
         public const string CanNotSetOpenPriceInNotActiveTrade = "can_not_set_open_price_in_not_active_trade";
         public const string CanNotUpdateClosePriceInActiveTrade = "can_not_update_close_price_in_active_trade";
+        public const string CanNotUpdateOpenComissionInNotActiveTrade = "can_not_update_open_comission_in_not_active_trade";
+        public const string CanNotUpdateCloseComissionInActiveTrade = "can_not_update_close_comission_in_active_trade";
     }
 }

@@ -1,5 +1,4 @@
-﻿using System.Data;
-using TradingJournal.Domain.Common;
+﻿using TradingJournal.Domain.Common;
 using TradingJournal.Domain.Infrastructure;
 using TradingJournal.Domain.TradeAgregate.Events;
 using TradingJournal.SharedKernel;
@@ -95,6 +94,35 @@ public class Trade : EntityBase<Guid>
     public Price? CloseComission { get; private set; }
 
     /// <summary>
+    /// Оценка сделки
+    /// </summary>
+    public TradeGrade? Grade { get; private set; }
+
+    /// <summary>
+    /// Тип рынка
+    /// </summary>
+    public MarketContext? MarketContext { get; private set; }
+
+    /// <summary>
+    /// Заметки
+    /// </summary>
+    public string Notes { get; private set; } = default!;
+
+    /// <summary>
+    /// Грязный финансовый результат. 
+    /// Сколько заработал рынок, до вычета комиссий.
+    /// Чистая математика входа и выхода. Без учёта издержек.
+    /// </summary>
+    public PnL? GrossPnL { get; private set; }
+
+    /// <summary>
+    /// Чистый финансовый результат. Сколько упало на счёт после всех издержек.
+    /// </summary>
+    public PnL? NetPnL { get; private set; }
+
+    public float? RiskRewardRatio { get; private set; }
+
+    /// <summary>
     /// Обновляет цену открытия
     /// </summary>
     public void UpdateOpenPrice(Price price)
@@ -172,10 +200,64 @@ public class Trade : EntityBase<Guid>
         AddDomainEvent(new TakeProfitUpdatedDomainEvent(Id, take?.Value));
     }
 
+    /// <summary>
+    /// Обновляет комиссию входа
+    /// </summary>
+    public void UpdateOpenComission(Price openComission)
+    {
+        if (!IsActive())
+            throw new DomainException<Trade>(CanNotUpdateOpenComissionInNotActiveTrade);
+        UpdatedAt = DateTime.UtcNow;
+        OpenComission = openComission;
+        AddDomainEvent(new OpenComissionUpdatedDomainEvent(Id, openComission));
+    }
+
+    /// <summary>
+    /// Обновляет комиссию за выход
+    /// </summary>
+    public void UpdateCloseComission(Price closeComission)
+    {
+        if (IsActive())
+            throw new DomainException<Trade>(CanNotUpdateCloseComissionInActiveTrade);
+        UpdatedAt = DateTime.UtcNow;
+        CloseComission = closeComission;
+        AddDomainEvent(new CloseComissionUpdatedDomainEvent(Id, closeComission));
+    }
+
+    /// <summary>
+    /// Обновялет оценку сделки
+    /// </summary>
+    public void UpdateTradeGrade(TradeGrade? grade)
+    {
+        Grade = grade;
+        UpdatedAt = DateTime.UtcNow;
+        AddDomainEvent(new TradeGradeUpdatedDomainEvent(Id, (int?)grade));
+    }
+
+    /// <summary>
+    /// Обновляет тип рынка
+    /// </summary>
+    public void UpdateMarketContext(MarketContext? context)
+    {
+        MarketContext = context;
+        UpdatedAt = DateTime.UtcNow;
+        AddDomainEvent(new MarketContextUpdatedDomainEvent(Id, context));
+    }
+
+    /// <summary>
+    /// Обновляет заметки
+    /// </summary>
+    public void UpdateNotes(string notes)
+    {
+        Notes = notes ?? string.Empty;
+        UpdatedAt = DateTime.UtcNow;
+        AddDomainEvent(new NotesUpdatedDomainEvent(Id, Notes));
+    }
+
     protected Trade() { }
 
-    public static Trade Open(string name, Volume volume, Price openPrice, TradeType type, DateTime? openDate = null,
-        Price? stopLoss = null, Price? takeProfit = null)
+    public static Trade Open(string name, Volume volume, Price openPrice, Price openComission, TradeType type, DateTime? openDate = null,
+        Price? stopLoss = null, Price? takeProfit = null, MarketContext? marketContext = null)
     {
         Trade trade = new();
         trade.Id = Guid.NewGuid();
@@ -188,6 +270,8 @@ public class Trade : EntityBase<Guid>
         trade.UpdateTradeType(type);
         trade.UpdateStopLoss(stopLoss);
         trade.UpdateTakeProfit(takeProfit);
+        trade.UpdateOpenComission(openComission);
+        trade.UpdateMarketContext(marketContext);
         DateTime now = DateTime.UtcNow;
         trade.CreatedAt = now;
         trade.UpdatedAt = now;
@@ -197,15 +281,18 @@ public class Trade : EntityBase<Guid>
     /// <summary>
     /// Закрывает сделку
     /// </summary>
-    public void Close(DateTime closeDate, Price closePrice, Price? stop = null, Price? take = null)
+    public void Close(DateTime closeDate, Price closePrice, Price closeComission, Price? stop = null,
+        Price? take = null, TradeGrade? grade = null)
     {
         if (!IsActive())
             throw new DomainException<Trade>(CanNotCloseNotActiveTrade);
         SetCloseDate(closeDate);
         Status = TradeStatus.Closed;
         UpdateClosePrice(closePrice);
+        UpdateCloseComission(closeComission);
         UpdateStopLoss(stop);
         UpdateTakeProfit(take);
+        UpdateTradeGrade(grade);
         UpdatedAt = DateTime.UtcNow;
     }
 
@@ -235,5 +322,117 @@ public class Trade : EntityBase<Guid>
     /// Указывает, является ли сделка активной
     /// </summary>
     private bool IsActive() => Status == TradeStatus.Active;
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="lotMultiplier">Мультипликатор лота (для акций = 1 или 10)</param>
+    /// <param name="tickSize">Шаг цены (только для фьючерсов)</param>
+    /// <param name="tickCost">Стоимость шага цены (только для фьючерсов)</param>
+    /// <param name="marketType">Тип рынка (Stock, Derivatives, Crypto)</param>
+    private void CalculatePnL(int lotMultiplier, decimal? tickSize, decimal? tickCost, MarketType marketType)
+    {
+        // Сделка должна быть закрыта и иметь цену выхода
+        if (ClosePrice is null)
+        {
+            GrossPnL = null;
+            NetPnL = null;
+            return;
+        }
+        decimal priceDifference = CalculatePriceDiffierence();      
+        decimal grossPnlValue = CalculateGrossPnl(marketType, tickSize, tickCost, priceDifference, lotMultiplier);
+        decimal totalComission = OpenComission.Value + (CloseComission?.Value ?? 0m);
+        GrossPnL = new PnL(grossPnlValue);
+        NetPnL = new PnL(grossPnlValue - totalComission);
+
+    }
+
+    /// <summary>
+    /// Расчёт GrossPnL в зависимости от типа рынка
+    /// </summary>
+    private decimal CalculateGrossPnl(MarketType marketType, decimal? tickSize, decimal? tickCost,
+        decimal priceDifference, int lotMultiplier)
+    {
+        decimal grossPnlValue;
+        if (marketType == MarketType.Derivatives 
+            && tickSize.HasValue && tickSize.Value > 0 
+            && tickCost.HasValue && tickCost.Value > 0)
+        {
+            // Фьючерсы: переводим пункты в тики, умножаем на стоимость тика и объём
+            // Пример: SiU4, шаг = 1, стоимость шага = 10 руб
+            // Цена прошла 240 пунктов = 240 тиков × 10 руб × 3 контракта = 7200 руб
+            var ticks = priceDifference / tickSize.Value;
+            grossPnlValue = ticks * tickCost.Value * Volume.Value;
+        }
+        else
+        {
+            // Акции / Спотовая крипта:
+            // Разница в цене × мультипликатор лота × объём
+            // Пример: SBER, разница 5 руб × 1 × 100 акций = 500 руб
+            grossPnlValue = priceDifference * lotMultiplier * Volume.Value;
+        }
+        return grossPnlValue;
+    }
+
+    /// <summary>
+    /// Вычисляет разницу цен в пунктах
+    /// </summary>
+    private decimal CalculatePriceDiffierence()
+    {
+        // Разница цен в пунктах (направление зависит от типа сделки)
+        decimal priceDifference = 0m;
+
+        if (TradeType == TradeType.Long)
+        {
+            // Long: купили дёшево, продали дорого → прибыль при росте цены
+            priceDifference = ClosePrice!.Value - OpenPrice.Value;
+        }
+        else
+        {
+            // Short: продали дорого, откупили дёшево → прибыль при падении цены
+            priceDifference = OpenPrice.Value - ClosePrice!.Value;
+        }
+        return priceDifference;
+    }
+
+    /// <summary>
+    /// Считает соотношение риска к прибыли
+    /// </summary>
+    /// <returns></returns>
+    private void CalculateRiskRewardRatio()
+    {
+        // Risk/Reward Ratio (реализованный)
+        // RRR = |Цена выхода − Цена входа| / |Цена входа − Стоп-лосс|
+        if (ClosePrice is null)
+        {
+            RiskRewardRatio = null;
+            return;
+        }
+        if (StopLoss is not  null)
+        {
+            var risk = Math.Abs(OpenPrice.Value - StopLoss.Value);
+            if (risk > 0)
+            {
+                var reward = Math.Abs(ClosePrice.Value - OpenPrice.Value);
+                RiskRewardRatio = decimal.ToSingle(reward / risk);
+            }
+            else
+            {
+                // Стоп-лосс равен цене входа (риск = 0), RRR не определён
+                RiskRewardRatio = null;
+            }
+        }
+        else
+        {
+            // Стоп-лосс не установлен, RRR не определён
+            RiskRewardRatio = null;
+        }
+    }
+
+    private void CalculatePnlAndRiskReward(int lotMultiplier, decimal? tickSize, decimal? tickCost, MarketType marketType)
+    {
+        CalculatePnL(lotMultiplier, tickSize, tickCost, marketType);
+        CalculateRiskRewardRatio();
+    }
 }
 
